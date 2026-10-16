@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <title>จัดการขั้นตอน — ผู้ดูแลระบบ</title>
+  <%- include('../partials/head') %>
+</head>
+<body>
+<nav class="app-nav">
+  <a class="brand" href="/admin">
+    <i class="bi bi-file-earmark-check"></i>
+    ฝ่ายเหรัญญิก <span class="badge-rune">รุ่น 21</span>
+  </a>
+  <div class="nav-links">
+    <a href="/admin"><i class="bi bi-arrow-left"></i> กลับ</a>
+    <a href="/admin/settings"><i class="bi bi-gear"></i> ตั้งค่า</a>
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff;border:none" onclick="logout()"><i class="bi bi-box-arrow-right"></i> ออก</button>
+  </div>
+</nav>
+
+<div class="admin-layout">
+  <aside class="admin-sidebar">
+    <div class="sidebar-section">เมนูหลัก</div>
+    <a href="/admin" class="sidebar-link"><i class="bi bi-speedometer2"></i> แดชบอร์ด</a>
+    <a href="#" class="sidebar-link active"><i class="bi bi-pencil-square"></i> จัดการขั้นตอน</a>
+    <a href="#" onclick="viewAudit()" class="sidebar-link"><i class="bi bi-clock-history"></i> ประวัติการแก้ไข</a>
+    <a href="/track/<%= recordId %>" target="_blank" class="sidebar-link"><i class="bi bi-eye"></i> ดูหน้าสาธารณะ</a>
+    <a href="/admin/settings" class="sidebar-link"><i class="bi bi-gear"></i> ตั้งค่า</a>
+  </aside>
+
+  <main class="admin-main">
+    <div id="mainContent"><div class="text-center py-5"><div class="spinner-border text-primary"></div></div></div>
+  </main>
+</div>
+
+<!-- Stage Edit Modal -->
+<div class="modal fade" id="stageModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil"></i> แก้ไขขั้นตอน</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editStageId">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">สถานะ</label>
+            <select id="editStatus" class="form-select">
+              <option value="pending">รอดำเนินการ</option>
+              <option value="in_progress">กำลังดำเนินการ</option>
+              <option value="completed">เสร็จสิ้น</option>
+              <option value="awaiting_docs">รอเอกสารเพิ่มเติม</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">วันที่ดำเนินการ</label>
+            <input type="date" id="editDate" class="form-control">
+          </div>
+          <div class="col-12">
+            <label class="form-label">ผู้รับผิดชอบ</label>
+            <input type="text" id="editPerson" class="form-control" placeholder="เช่น เหรัญญิก รุ่น 21">
+          </div>
+          <div class="col-12">
+            <label class="form-label">หมายเหตุสาธารณะ <span style="font-size:.75rem;color:var(--grey-500)">(แสดงต่อสมาชิก)</span></label>
+            <textarea id="editPublicNote" class="form-control" rows="2" placeholder="ข้อความที่จะแสดงในหน้าสาธารณะ"></textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label">หมายเหตุภายใน <span style="font-size:.75rem;color:var(--grey-500)">(ไม่แสดงต่อสาธารณะ)</span></label>
+            <textarea id="editPrivateNote" class="form-control" rows="2" placeholder="บันทึกสำหรับทีมงานเท่านั้น"></textarea>
+          </div>
+          <div class="col-12">
+            <div class="form-check">
+              <input type="checkbox" id="editSetCurrent" class="form-check-input">
+              <label for="editSetCurrent" class="form-check-label" style="font-size:.875rem">
+                <i class="bi bi-geo-alt-fill" style="color:var(--blue-600)"></i> ตั้งเป็นขั้นตอนปัจจุบัน
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveStage()"><i class="bi bi-check-lg"></i> บันทึก</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Insert Stage Modal -->
+<div class="modal fade" id="insertModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle" style="color:#a78bfa"></i> แทรกขั้นตอนเร่งด่วน</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">ชื่อขั้นตอน <span class="text-danger">*</span></label>
+          <input type="text" id="insertTitle" class="form-control" placeholder="เช่น ตรวจสอบเอกสารเพิ่มเติมเร่งด่วน">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">แทรกหลังขั้นตอนที่</label>
+          <select id="insertAfter" class="form-select"></select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">หมายเหตุสาธารณะ</label>
+          <textarea id="insertPublicNote" class="form-control" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn" style="background:var(--inserted-accent);color:#fff" onclick="insertStage()"><i class="bi bi-check-lg"></i> แทรก</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Audit Log Modal -->
+<div class="modal fade" id="auditModal" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-clock-history"></i> ประวัติการแก้ไข</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body" id="auditContent"><div class="text-center py-4"><div class="spinner-border text-primary"></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Record Info Modal -->
+<div class="modal fade" id="recordInfoModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-info-circle"></i> แก้ไขข้อมูลการติดตาม</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-3"><label class="form-label">ชื่อการติดตาม</label><input type="text" id="infoTitle" class="form-control"></div>
+        <div class="mb-3"><label class="form-label">ผู้ยื่นเรื่อง</label><input type="text" id="infoRequester" class="form-control"></div>
+        <div class="mb-3"><label class="form-label">หมายเหตุสาธารณะ</label><textarea id="infoPublicNote" class="form-control" rows="2"></textarea></div>
+        <div class="mb-3"><label class="form-label">สถานะการติดตาม</label>
+          <select id="infoStatus" class="form-select">
+            <option value="active">กำลังดำเนินการ</option>
+            <option value="completed">เสร็จสิ้น</option>
+            <option value="cancelled">ยกเลิก</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveRecordInfo()"><i class="bi bi-check-lg"></i> บันทึก</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const RECORD_ID = '<%= recordId %>';
+const STATUS_LABEL = { pending: 'รอดำเนินการ', in_progress: 'กำลังดำเนินการ', completed: 'เสร็จสิ้น', awaiting_docs: 'รอเอกสารเพิ่มเติม' };
+let recordData = null, stagesData = [];
+
+async function loadData() {
+  try {
+    const res = await fetch(`/api/records/${RECORD_ID}`);
+    if (!res.ok) { window.location.href = '/login'; return; }
+    const { record, stages } = await res.json();
+    recordData = record; stagesData = stages;
+    render();
+  } catch { showToast('ไม่สามารถโหลดข้อมูลได้', 'error'); }
+}
+
+function render() {
+  const r = recordData; const stages = stagesData;
+  const completed = stages.filter(s => s.status === 'completed').length;
+  const pct = stages.length ? Math.round((completed / stages.length) * 100) : 0;
+  const shareUrl = `${location.origin}/track/${RECORD_ID}`;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+      <div>
+        <h2 style="font-size:1.15rem;font-weight:700;color:var(--blue-900);margin:0">${r.title}</h2>
+        ${r.requester_name ? `<p style="font-size:.85rem;color:var(--grey-500);margin:2px 0 0"><i class="bi bi-person"></i> ${r.requester_name}</p>` : ''}
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-sm btn-outline-secondary" onclick="openRecordInfo()"><i class="bi bi-pencil"></i> แก้ไขข้อมูล</button>
+        <button class="btn btn-sm" style="background:var(--inserted-accent);color:#fff" onclick="openInsertModal()"><i class="bi bi-plus-circle"></i> แทรกขั้นตอน</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="viewAudit()"><i class="bi bi-clock-history"></i> ประวัติ</button>
+      </div>
+    </div>
+
+    ${r.public_note ? `<div class="tl-note mb-3"><i class="bi bi-megaphone"></i> ${r.public_note}</div>` : ''}
+
+    <!-- Stats -->
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-md-3"><div class="card-flat text-center"><div class="stat-num" style="font-size:1.5rem;color:var(--blue-800)">${pct}%</div><div style="font-size:.78rem;color:var(--grey-500)">ความคืบหน้า</div></div></div>
+      <div class="col-6 col-md-3"><div class="card-flat text-center"><div class="stat-num" style="font-size:1.5rem;color:#15803d">${completed}</div><div style="font-size:.78rem;color:var(--grey-500)">เสร็จสิ้น</div></div></div>
+      <div class="col-6 col-md-3"><div class="card-flat text-center"><div class="stat-num" style="font-size:1.5rem;color:var(--blue-600)">${stages.length}</div><div style="font-size:.78rem;color:var(--grey-500)">ทั้งหมด</div></div></div>
+      <div class="col-6 col-md-3"><div class="card-flat text-center"><div class="stat-num" style="font-size:.85rem;color:var(--grey-500)">${new Date(r.updated_at).toLocaleDateString('th-TH', {day:'numeric',month:'short',year:'numeric'})}</div><div style="font-size:.78rem;color:var(--grey-500)">อัปเดตล่าสุด</div></div></div>
+    </div>
+
+    <div class="mb-3">
+      <div class="progress" style="height:10px;border-radius:8px">
+        <div class="progress-bar ${pct===100?'bg-success':'bg-primary'}" style="width:${pct}%;transition:width .5s"></div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="card-flat">
+      <h5><i class="bi bi-list-check"></i> ขั้นตอนการดำเนินงาน</h5>
+      <ul class="timeline">
+        ${stages.map((s, i) => `
+          <li class="tl-item ${s.id == r.current_stage_id ? 'is-current' : ''}">
+            <div class="tl-dot ${s.status} ${s.stage_type==='inserted'?'inserted':''}">
+              ${s.status==='completed'?'<i class="bi bi-check-lg"></i>':(i+1)}
+            </div>
+            <div class="tl-body">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div class="tl-title">
+                  ${s.title}
+                  ${s.stage_type==='inserted'?'<span class="badge-inserted ms-1">เพิ่มเติม</span>':''}
+                  <span class="status-badge status-${s.status} ms-1">${STATUS_LABEL[s.status]}</span>
+                  ${s.id==r.current_stage_id?'<span class="badge bg-primary ms-1" style="font-size:.7rem">ปัจจุบัน</span>':''}
+                </div>
+                <div class="d-flex gap-1 flex-shrink-0">
+                  <button class="btn btn-sm btn-outline-primary" onclick="openStageEdit(${s.id})" title="แก้ไข"><i class="bi bi-pencil"></i></button>
+                  ${s.stage_type==='inserted'?`<button class="btn btn-sm btn-outline-danger" onclick="deleteStage(${s.id},'${s.title.replace(/'/g,"\\'")}')"><i class="bi bi-trash"></i></button>`:''}
+                </div>
+              </div>
+              <div class="tl-meta">
+                ${s.responsible_person?`<i class="bi bi-person-fill"></i> ${s.responsible_person}`:''} 
+                ${s.action_date?`&nbsp;·&nbsp;<i class="bi bi-calendar3"></i> ${new Date(s.action_date).toLocaleDateString('th-TH')}`:''}
+              </div>
+              ${s.public_note?`<div class="tl-note">${s.public_note}</div>`:''}
+              ${s.private_note?`<div class="tl-note" style="border-left-color:#d97706;background:#fef9ec"><i class="bi bi-lock-fill" style="color:#d97706"></i> ${s.private_note}</div>`:''}
+            </div>
+          </li>
+        `).join('')}
+      </ul>
+    </div>
+
+    <!-- Share link -->
+    <div class="copy-link-bar mt-3">
+      <i class="bi bi-link-45deg" style="color:var(--blue-600)"></i>
+      <span class="link-text">${shareUrl}</span>
+      <button class="btn btn-sm btn-outline-primary" onclick="copyLink('${shareUrl}')"><i class="bi bi-clipboard"></i> คัดลอก</button>
+      <a href="${shareUrl}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-up-right"></i></a>
+    </div>
+  `;
+}
+
+function openStageEdit(stageId) {
+  const s = stagesData.find(x => x.id === stageId);
+  if (!s) return;
+  document.getElementById('editStageId').value = stageId;
+  document.getElementById('editStatus').value = s.status;
+  document.getElementById('editDate').value = s.action_date ? s.action_date.split('T')[0] : '';
+  document.getElementById('editPerson').value = s.responsible_person || '';
+  document.getElementById('editPublicNote').value = s.public_note || '';
+  document.getElementById('editPrivateNote').value = s.private_note || '';
+  document.getElementById('editSetCurrent').checked = s.id == recordData.current_stage_id;
+  new bootstrap.Modal(document.getElementById('stageModal')).show();
+}
+
+async function saveStage() {
+  const stageId = document.getElementById('editStageId').value;
+  const body = { status: document.getElementById('editStatus').value, action_date: document.getElementById('editDate').value || null, responsible_person: document.getElementById('editPerson').value, public_note: document.getElementById('editPublicNote').value, private_note: document.getElementById('editPrivateNote').value, set_current: document.getElementById('editSetCurrent').checked };
+  try {
+    const res = await fetch(`/api/records/${RECORD_ID}/stages/${stageId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (res.ok) { bootstrap.Modal.getInstance(document.getElementById('stageModal')).hide(); showToast('บันทึกสำเร็จ', 'success'); loadData(); }
+    else showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+  } catch { showToast('เกิดข้อผิดพลาด', 'error'); }
+}
+
+function openInsertModal() {
+  const sel = document.getElementById('insertAfter');
+  sel.innerHTML = '<option value="0">ก่อนขั้นตอนแรก</option>' + stagesData.map(s => `<option value="${s.display_order}">หลัง: ${s.title.substring(0,40)}...</option>`).join('');
+  new bootstrap.Modal(document.getElementById('insertModal')).show();
+}
+
+async function insertStage() {
+  const title = document.getElementById('insertTitle').value.trim();
+  if (!title) { showToast('กรุณากรอกชื่อขั้นตอน', 'error'); return; }
+  const body = { title, insert_after_order: parseInt(document.getElementById('insertAfter').value), public_note: document.getElementById('insertPublicNote').value };
+  try {
+    const res = await fetch(`/api/records/${RECORD_ID}/stages`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (res.ok) { bootstrap.Modal.getInstance(document.getElementById('insertModal')).hide(); showToast('แทรกขั้นตอนสำเร็จ', 'success'); loadData(); }
+    else showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
+  } catch { showToast('เกิดข้อผิดพลาด', 'error'); }
+}
+
+async function deleteStage(stageId, title) {
+  if (!confirm(`ยืนยันการลบขั้นตอน: "${title}"?`)) return;
+  try {
+    const res = await fetch(`/api/records/${RECORD_ID}/stages/${stageId}`, { method: 'DELETE' });
+    if (res.ok) { showToast('ลบขั้นตอนสำเร็จ', 'success'); loadData(); }
+    else { const d = await res.json(); showToast(d.error || 'เกิดข้อผิดพลาด', 'error'); }
+  } catch { showToast('เกิดข้อผิดพลาด', 'error'); }
+}
+
+async function viewAudit() {
+  const modal = new bootstrap.Modal(document.getElementById('auditModal'));
+  modal.show();
+  try {
+    const res = await fetch(`/api/records/${RECORD_ID}/audit`);
+    const logs = await res.json();
+    document.getElementById('auditContent').innerHTML = logs.length ? `
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead><tr><th>เวลา</th><th>ผู้ดำเนินการ</th><th>การกระทำ</th><th>รายละเอียด</th></tr></thead>
+          <tbody>${logs.map(l => `<tr>
+            <td class="mono">${new Date(l.created_at).toLocaleString('th-TH')}</td>
+            <td>${l.user_name || '—'}</td>
+            <td><code style="font-size:.75rem">${l.action}</code></td>
+            <td style="font-size:.82rem">${l.description || '—'}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>` : '<p class="text-center py-3" style="color:var(--grey-500)">ไม่มีประวัติการแก้ไข</p>';
+  } catch { document.getElementById('auditContent').innerHTML = '<p class="text-center">เกิดข้อผิดพลาด</p>'; }
+}
+
+function openRecordInfo() {
+  document.getElementById('infoTitle').value = recordData.title;
+  document.getElementById('infoRequester').value = recordData.requester_name || '';
+  document.getElementById('infoPublicNote').value = recordData.public_note || '';
+  document.getElementById('infoStatus').value = recordData.status;
+  new bootstrap.Modal(document.getElementById('recordInfoModal')).show();
+}
+
+async function saveRecordInfo() {
+  const body = { title: document.getElementById('infoTitle').value, requester_name: document.getElementById('infoRequester').value, public_note: document.getElementById('infoPublicNote').value, status: document.getElementById('infoStatus').value };
+  try {
+    const res = await fetch(`/api/records/${RECORD_ID}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if (res.ok) { bootstrap.Modal.getInstance(document.getElementById('recordInfoModal')).hide(); showToast('บันทึกสำเร็จ', 'success'); loadData(); }
+    else { const d = await res.json(); showToast(d.error || 'เกิดข้อผิดพลาด', 'error'); }
+  } catch { showToast('เกิดข้อผิดพลาด', 'error'); }
+}
+
+function copyLink(url) { navigator.clipboard.writeText(url).then(() => showToast('คัดลอกลิงก์แล้ว', 'success')); }
+
+function showToast(msg, type='') {
+  const t = document.createElement('div'); t.className = `toast-msg ${type}`;
+  t.innerHTML = `<i class="bi bi-${type==='error'?'exclamation-circle':'check-circle'}"></i> ${msg}`;
+  document.getElementById('toastContainer').appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); window.location.href = '/login'; }
+
+loadData();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

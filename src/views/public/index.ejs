@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <title>ติดตามเอกสาร — ฝ่ายเหรัญญิก รุ่น 21</title>
+  <%- include('../partials/head') %>
+</head>
+<body>
+<nav class="app-nav">
+  <a class="brand" href="/">
+    <i class="bi bi-file-earmark-check"></i>
+    ฝ่ายเหรัญญิก <span class="badge-rune">รุ่น 21</span>
+  </a>
+  <div class="nav-links">
+    <% if (user) { %>
+      <a href="/admin"><i class="bi bi-speedometer2"></i> แดชบอร์ด</a>
+    <% } else { %>
+      <a href="/login"><i class="bi bi-lock"></i> ผู้ดูแลระบบ</a>
+    <% } %>
+  </div>
+</nav>
+
+<div style="max-width:800px;margin:3rem auto;padding:0 1rem;">
+  <div class="text-center mb-4">
+    <div style="font-size:3rem;color:var(--blue-600)"><i class="bi bi-clipboard2-pulse"></i></div>
+    <h1 style="font-size:1.5rem;font-weight:700;color:var(--blue-900);margin-top:.75rem">ระบบติดตามการตรวจสอบเอกสาร</h1>
+    <p style="color:var(--grey-500);font-size:.9rem">สำนักวิชาแพทยศาสตร์ มหาวิทยาลัยเทคโนโลยีสุรนารี — รุ่น 21</p>
+  </div>
+
+  <!-- Search -->
+  <div class="card-flat mb-3">
+    <div class="search-bar mb-3">
+      <i class="bi bi-search"></i>
+      <input type="text" id="searchInput" class="form-control" placeholder="ค้นหาชื่อการติดตาม...">
+    </div>
+    <div id="statusFilter" class="d-flex gap-2 flex-wrap">
+      <button class="btn btn-sm btn-primary filter-btn" data-status="all">ทั้งหมด</button>
+      <button class="btn btn-sm btn-outline-secondary filter-btn" data-status="pending">รอดำเนินการ</button>
+      <button class="btn btn-sm btn-outline-secondary filter-btn" data-status="in_progress">กำลังดำเนินการ</button>
+      <button class="btn btn-sm btn-outline-secondary filter-btn" data-status="completed">เสร็จสิ้น</button>
+      <button class="btn btn-sm btn-outline-secondary filter-btn" data-status="awaiting_docs">รอเอกสาร</button>
+    </div>
+  </div>
+
+  <div id="recordsList">
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+  </div>
+
+  <p style="font-size:.75rem;color:var(--grey-500);text-align:center;margin-top:2rem">
+    <i class="bi bi-shield-check"></i> ข้อมูลส่วนตัว บัญชีธนาคาร และรายละเอียดการเงินไม่ถูกเปิดเผยในหน้านี้
+  </p>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+let allRecords = [], activeFilter = 'all', searchQuery = '';
+
+const STATUS_LABEL = { pending: 'รอดำเนินการ', in_progress: 'กำลังดำเนินการ', completed: 'เสร็จสิ้น', awaiting_docs: 'รอเอกสารเพิ่มเติม' };
+const STATUS_CLASS = { pending: 'status-pending', in_progress: 'status-in_progress', completed: 'status-completed', awaiting_docs: 'status-awaiting_docs' };
+
+async function loadRecords() {
+  try {
+    const res = await fetch('/api/records/public');
+    allRecords = await res.json();
+    render();
+  } catch { showToast('ไม่สามารถโหลดข้อมูลได้', 'error'); }
+}
+
+function getRecordStatus(record) {
+  return record.current_stage_status || 'pending';
+}
+
+function render() {
+  const q = searchQuery.toLowerCase();
+  let filtered = allRecords.filter(r => {
+    const matchSearch = !q || r.title.toLowerCase().includes(q) || (r.requester_name || '').toLowerCase().includes(q);
+    return matchSearch;
+  });
+
+  if (!filtered.length) {
+    document.getElementById('recordsList').innerHTML = '<div class="card-flat text-center py-5" style="color:var(--grey-500)"><i class="bi bi-inbox" style="font-size:2rem"></i><p class="mt-2">ไม่พบรายการ</p></div>';
+    return;
+  }
+
+  document.getElementById('recordsList').innerHTML = filtered.map(r => `
+    <a href="/track/${r.id}" class="card-flat d-block text-decoration-none mb-3" style="transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 4px 20px rgba(15,39,73,.1)'" onmouseout="this.style.boxShadow=''">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <div class="rec-title">${r.title}</div>
+          ${r.requester_name ? `<div class="rec-sub"><i class="bi bi-person"></i> ${r.requester_name}</div>` : ''}
+          ${r.public_note ? `<div class="tl-note mt-2">${r.public_note}</div>` : ''}
+        </div>
+        <div class="text-end flex-shrink-0">
+          <div><i class="bi bi-arrow-right-circle" style="color:var(--blue-600)"></i></div>
+          <div class="mono mt-1" style="color:var(--grey-500)">${new Date(r.updated_at).toLocaleDateString('th-TH')}</div>
+        </div>
+      </div>
+    </a>
+  `).join('');
+}
+
+document.getElementById('searchInput').addEventListener('input', e => { searchQuery = e.target.value; render(); });
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeFilter = btn.dataset.status;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.replace('btn-primary', 'btn-outline-secondary'));
+    btn.classList.replace('btn-outline-secondary', 'btn-primary');
+    render();
+  });
+});
+
+function showToast(msg, type='') {
+  const t = document.createElement('div');
+  t.className = `toast-msg ${type}`;
+  t.innerHTML = `<i class="bi bi-${type === 'error' ? 'exclamation-circle' : 'check-circle'}"></i> ${msg}`;
+  document.getElementById('toastContainer').appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+loadRecords();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
